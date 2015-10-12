@@ -57,7 +57,7 @@ def loadConfig():
         # This appears to be the first time running the program; there is
         # no config file (or it cannot be accessed). Create config file.
         shared.config.add_section('bitmessagesettings')
-        shared.config.set('bitmessagesettings', 'settingsversion', '8')
+        shared.config.set('bitmessagesettings', 'settingsversion', '10')
         shared.config.set('bitmessagesettings', 'port', '8444')
         shared.config.set(
             'bitmessagesettings', 'timeformat', '%%a, %%d %%b %%Y  %%I:%%M %%p')
@@ -89,7 +89,7 @@ def loadConfig():
         shared.config.set(
             'bitmessagesettings', 'messagesencrypted', 'false')
         shared.config.set('bitmessagesettings', 'defaultnoncetrialsperbyte', str(
-            shared.networkDefaultProofOfWorkNonceTrialsPerByte * 2))
+            shared.networkDefaultProofOfWorkNonceTrialsPerByte))
         shared.config.set('bitmessagesettings', 'defaultpayloadlengthextrabytes', str(
             shared.networkDefaultPayloadLengthExtraBytes))
         shared.config.set('bitmessagesettings', 'minimizeonclose', 'false')
@@ -102,6 +102,9 @@ def loadConfig():
         shared.config.set('bitmessagesettings', 'useidenticons', 'True')
         shared.config.set('bitmessagesettings', 'identiconsuffix', ''.join(random.choice("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz") for x in range(12))) # a twelve character pseudo-password to salt the identicons
         shared.config.set('bitmessagesettings', 'replybelow', 'False')
+        shared.config.set('bitmessagesettings', 'maxdownloadrate', '0')
+        shared.config.set('bitmessagesettings', 'maxuploadrate', '0')
+        shared.config.set('bitmessagesettings', 'ttl', '367200')
         
          #start:UI setting to stop trying to send messages after X days/months
         shared.config.set(
@@ -131,8 +134,7 @@ def loadConfig():
                 os.makedirs(shared.appdata)
         if not sys.platform.startswith('win'):
             os.umask(0o077)
-        with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-            shared.config.write(configfile)
+        shared.writeKeysFile()
 
     _loadTrustedPeer()
 
@@ -143,5 +145,5 @@ def isOurOperatingSystemLimitedToHavingVeryFewHalfOpenConnections():
             return StrictVersion("5.1.2600")<=VER_THIS and StrictVersion("6.0.6000")>=VER_THIS
         return False
     except Exception as err:
-        print 'An Exception occurred within isOurOperatingSystemLimitedToHavingVeryFewHalfOpenConnections:', err
+        print "Info: we could not tell whether your OS is limited to having very view half open connections because we couldn't interpret the platform version. Don't worry; we'll assume that it is not limited. This tends to occur on Raspberry Pis. :", err
         return False

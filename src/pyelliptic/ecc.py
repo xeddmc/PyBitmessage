@@ -7,7 +7,7 @@
 from hashlib import sha512
 from pyelliptic.openssl import OpenSSL
 from pyelliptic.cipher import Cipher
-from pyelliptic.hash import hmac_sha256
+from pyelliptic.hash import hmac_sha256, equals
 from struct import pack, unpack
 
 
@@ -299,7 +299,7 @@ class ECC:
             if privkey is not None:
                 OpenSSL.BN_free(priv_key)
 
-    def sign(self, inputb):
+    def sign(self, inputb, digest_alg=OpenSSL.EVP_ecdsa):
         """
         Sign the input with ECDSA method and returns the signature
         """
@@ -338,11 +338,11 @@ class ECC:
                 raise Exception("[OpenSSL] EC_KEY_check_key FAIL ...")
 
             OpenSSL.EVP_MD_CTX_init(md_ctx)
-            OpenSSL.EVP_DigestInit(md_ctx, OpenSSL.EVP_ecdsa())
+            OpenSSL.EVP_DigestInit_ex(md_ctx, digest_alg(), None)
 
             if (OpenSSL.EVP_DigestUpdate(md_ctx, buff, size)) == 0:
                 raise Exception("[OpenSSL] EVP_DigestUpdate FAIL ...")
-            OpenSSL.EVP_DigestFinal(md_ctx, digest, dgst_len)
+            OpenSSL.EVP_DigestFinal_ex(md_ctx, digest, dgst_len)
             OpenSSL.ECDSA_sign(0, digest, dgst_len.contents, sig, siglen, key)
             if (OpenSSL.ECDSA_verify(0, digest, dgst_len.contents, sig,
                                      siglen.contents, key)) != 1:
@@ -358,7 +358,7 @@ class ECC:
             OpenSSL.EC_POINT_free(pub_key)
             OpenSSL.EVP_MD_CTX_destroy(md_ctx)
 
-    def verify(self, sig, inputb):
+    def verify(self, sig, inputb, digest_alg=OpenSSL.EVP_ecdsa):
         """
         Verify the signature with the input and the local public key.
         Returns a boolean
@@ -392,11 +392,11 @@ class ECC:
                 raise Exception("[OpenSSL] EC_KEY_check_key FAIL ...")
 
             OpenSSL.EVP_MD_CTX_init(md_ctx)
-            OpenSSL.EVP_DigestInit(md_ctx, OpenSSL.EVP_ecdsa())
+            OpenSSL.EVP_DigestInit_ex(md_ctx, digest_alg(), None)
             if (OpenSSL.EVP_DigestUpdate(md_ctx, binputb, len(inputb))) == 0:
                 raise Exception("[OpenSSL] EVP_DigestUpdate FAIL ...")
 
-            OpenSSL.EVP_DigestFinal(md_ctx, digest, dgst_len)
+            OpenSSL.EVP_DigestFinal_ex(md_ctx, digest, dgst_len)
             ret = OpenSSL.ECDSA_verify(
                 0, digest, dgst_len.contents, bsig, len(sig), key)
 
@@ -436,11 +436,9 @@ class ECC:
         pubkey = ephem.get_pubkey()
         iv = OpenSSL.rand(OpenSSL.get_cipher(ciphername).get_blocksize())
         ctx = Cipher(key_e, iv, 1, ciphername)
-        ciphertext = ctx.ciphering(data)
-        #ciphertext = iv + pubkey + ctx.ciphering(data) # We will switch to this line after an upgrade period
+        ciphertext = iv + pubkey + ctx.ciphering(data)
         mac = hmac_sha256(key_m, ciphertext)
-        return iv + pubkey + ciphertext + mac
-        #return ciphertext + mac # We will switch to this line after an upgrade period.
+        return ciphertext + mac
 
     def decrypt(self, data, ciphername='aes-256-cbc'):
         """
@@ -456,14 +454,7 @@ class ECC:
         mac = data[i:]
         key = sha512(self.raw_get_ecdh_key(pubkey_x, pubkey_y)).digest()
         key_e, key_m = key[:32], key[32:]
-        """
-        pyelliptic was changed slightly so that the hmac covers the
-        iv and pubkey. So let's have an upgrade period where we support
-        both the old and the new hmac'ing algorithms.
-        https://github.com/yann2192/pyelliptic/issues/17
-        """
-        if hmac_sha256(key_m, ciphertext) != mac:
-            if hmac_sha256(key_m, data[:len(data) - 32]) != mac:
-                raise RuntimeError("Fail to verify data")
+        if not equals(hmac_sha256(key_m, data[:len(data) - 32]), mac):
+            raise RuntimeError("Fail to verify data")
         ctx = Cipher(key_e, iv, 0, ciphername)
         return ctx.ciphering(ciphertext)

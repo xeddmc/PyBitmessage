@@ -471,15 +471,13 @@ def handlech(c, stdscr):
                                 label = t
                                 shared.config.set(a, "label", label)
                                 # Write config
-                                with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-                                    shared.config.write(configfile)
+                                shared.writeKeysFile()
                                 addresses[addrcur][0] = label
                         elif t == "4": # Enable address
                             a = addresses[addrcur][2]
                             shared.config.set(a, "enabled", "true") # Set config
                             # Write config
-                            with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-                                shared.config.write(configfile)
+                            shared.writeKeysFile()
                             # Change color
                             if shared.safeConfigGetBoolean(a, 'chan'):
                                 addresses[addrcur][3] = 9 # orange
@@ -494,16 +492,14 @@ def handlech(c, stdscr):
                             shared.config.set(a, "enabled", "false") # Set config
                             addresses[addrcur][3] = 8 # Set color to gray
                             # Write config
-                            with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-                                shared.config.write(configfile)
+                            shared.writeKeysFile()
                             addresses[addrcur][1] = False
                             shared.reloadMyAddressHashes() # Reload address hashes
                         elif t == "6": # Delete address
                             r, t = d.inputbox("Type in \"I want to delete this address\"", width=50)
                             if r == d.DIALOG_OK and t == "I want to delete this address":
                                     shared.config.remove_section(addresses[addrcur][2])
-                                    with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-                                        shared.config.write(configfile)
+                                    shared.writeKeysFile()
                                     del addresses[addrcur]
                         elif t == "7": # Special address behavior
                             a = addresses[addrcur][2]
@@ -534,8 +530,7 @@ def handlech(c, stdscr):
                                             shared.config.set(a, "mailinglistname", mn)
                                             addresses[addrcur][3] = 6 # Set color to magenta
                                     # Write config
-                                    with open(shared.appdata + 'keys.dat', 'wb') as configfile:
-                                        shared.config.write(configfile)
+                                    shared.writeKeysFile()
                 elif menutab == 5:
                     d.set_background_title("Subscriptions Dialog Box")
                     r, t = d.menu("Do what with subscription to \""+subscriptions[subcur][0]+"\"?",
@@ -742,6 +737,8 @@ def sendMessage(sender="", recv="", broadcast=None, subject="", body="", reply=F
                         err += "Some data encoded in the address is too short. There might be something wrong with the software of your acquaintance."
                     elif status == "ripetoolong":
                         err += "Some data encoded in the address is too long. There might be something wrong with the software of your acquaintance."
+                    elif status == "varintmalformed":
+                        err += "Some data encoded in the address is malformed. There might be something wrong with the software of your acquaintance."
                     else:
                         err += "It is unknown what is wrong with the address."
                     d.scrollbox(unicode(err), exit_label="Continue")
@@ -763,7 +760,7 @@ def sendMessage(sender="", recv="", broadcast=None, subject="", body="", reply=F
                             exit_label="Continue")
                     ackdata = OpenSSL.rand(32)
                     sqlExecute(
-                        "INSERT INTO sent VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sent VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         "",
                         addr,
                         ripe,
@@ -771,12 +768,14 @@ def sendMessage(sender="", recv="", broadcast=None, subject="", body="", reply=F
                         subject,
                         body,
                         ackdata,
-                        int(time.time()),
+                        int(time.time()), # sentTime (this will never change)
+                        int(time.time()), # lastActionTime
+                        0, # sleepTill time. This will get set when the POW gets done.
                         "msgqueued",
-                        1,
-                        1,
+                        0, # retryNumber
                         "sent",
-                        2)
+                        2, # encodingType
+                        shared.config.getint('bitmessagesettings', 'ttl'))
                     shared.workerQueue.put(("sendmessage", addr))
     else: # Broadcast
         if recv == "":
@@ -788,7 +787,7 @@ def sendMessage(sender="", recv="", broadcast=None, subject="", body="", reply=F
             recv = BROADCAST_STR
             ripe = ""
             sqlExecute(
-                "INSERT INTO sent VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO sent VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 "",
                 recv,
                 ripe,
@@ -796,12 +795,14 @@ def sendMessage(sender="", recv="", broadcast=None, subject="", body="", reply=F
                 subject,
                 body,
                 ackdata,
-                int(time.time()),
+                int(time.time()), # sentTime (this will never change)
+                int(time.time()), # lastActionTime
+                0, # sleepTill time. This will get set when the POW gets done.
                 "broadcastqueued",
-                1,
-                1,
-                "sent",
-                2)
+                0, # retryNumber
+                "sent", # folder
+                2, # encodingType
+                shared.config.getint('bitmessagesettings', 'ttl'))
             shared.workerQueue.put(('sendbroadcast', ''))
 
 def loadInbox():

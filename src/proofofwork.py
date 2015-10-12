@@ -5,6 +5,7 @@ import hashlib
 from struct import unpack, pack
 import sys
 from shared import config, frozen
+import shared
 #import os
 
 def _set_idle():
@@ -39,7 +40,6 @@ def _doSafePoW(target, initialHash):
     return [trialValue, nonce]
 
 def _doFastPoW(target, initialHash):
-    import shared
     import time
     from multiprocessing import Pool, cpu_count
     try:
@@ -71,6 +71,7 @@ def _doFastPoW(target, initialHash):
         time.sleep(0.2)
 
 def run(target, initialHash):
+    target = int(target)
     if frozen == "macosx_app" or not frozen:
         return _doFastPoW(target, initialHash)
     else:
